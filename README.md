@@ -15,4 +15,4 @@ To get started with the resources in this repository, follow these steps:
 
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/your-username/Pressure_Ulcer.git
+   git clone https://github.com/your-username/Pressure-ulcer.git
