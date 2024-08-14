@@ -1,5 +1,2 @@
 data/
-myenv/
-data_generation/cache
-data_generation/__pycache__
-wgan_gp_test\
+# sample change
