@@ -6,3 +6,5 @@ model_config:
   beta_1: 0.5
   beta_2: 0.9
   batch_size: 32 
+  noise_dim : 32
+  dim : 32
