@@ -6,10 +6,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class Generate:
-    def __init__(self, data, config_path):
+    def __init__(self, data, config_path, gan):
         self.data = data
         self.config_path = config_path
-        self.gan = 'WGAN_GP'
+        self.gan = gan
         self.numerical_columns = []
         self.categorical_columns = []
         self.load_config()
