@@ -2,7 +2,10 @@ from generate import Generate
 import warnings
 import pandas as pd
 import os
+from dotenv import load_dotenv
+from pathlib import Path
 
+load_dotenv()
 warnings.filterwarnings("ignore")
 
 def initialize_generator(data_path, config_path, gan):
@@ -26,9 +29,9 @@ def save_synthetic_data(synthetic_data, save_directory, gan):
     print(f"Synthetic data saved as {save_path}")
 
 def main():
-    data_path = r'D:\Pressure-ulcer\data\pressure ulcer.xlsx'
-    config_path = r'D:\Pressure-ulcer\config\gen_config.yaml'
-    save_directory = r"D:\Pressure-ulcer\data"
+    data_path = Path(os.getenv('DATA_PATH'))
+    config_path = Path(os.getenv('CONFIG_PATH'))
+    save_directory = Path(os.getenv('SAVE_PATH'))
     gan = 'WGAN_GP'
     num_samples = 100
 
