@@ -49,3 +49,6 @@ class Generate:
         synthetic_data = self.gan.sample(num_samples)
         
         return synthetic_data
+    
+    def get_gan_name(self):
+        return self.gan_name
