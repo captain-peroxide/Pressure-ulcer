@@ -51,4 +51,4 @@ class Generate:
         return synthetic_data
     
     def get_gan_name(self):
-        return self.gan_name
+        return self.gan
