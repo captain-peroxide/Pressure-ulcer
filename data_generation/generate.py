@@ -3,6 +3,10 @@ import pandas as pd
 from ydata_synthetic.synthesizers.regular import RegularSynthesizer
 from ydata_synthetic.synthesizers import ModelParameters, TrainParameters
 import warnings
+import tensorflow as tf
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)  
 warnings.filterwarnings("ignore")
 
 class Generate:
@@ -34,7 +38,17 @@ class Generate:
             data[col] = data[col].astype(str)
         
         if self.gan == 'WGAN_GP':
-            self.gan = RegularSynthesizer(modelname='wgangp', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))
+            self.gan = RegularSynthesizer(modelname='wgangp', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], layers_dim = self.model_parameters['dim'], noise_dim = self.model_parameters['noise_dim'] , betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])), n_critic = 3)
+        elif self.gan == 'CGAN':
+            self.gan = RegularSynthesizer(modelname='cgan', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], layers_dim = self.model_parameters['dim'], noise_dim = self.model_parameters['noise_dim'] , betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))
+        elif self.gan == 'WGAN':
+            self.gan = RegularSynthesizer(modelname='wgan', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], layers_dim = self.model_parameters['dim'], noise_dim = self.model_parameters['noise_dim'] , betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])), n_critic = 3)     
+        elif self.gan == 'DRAGAN':
+            self.gan = RegularSynthesizer(modelname='dragan', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], layers_dim = self.model_parameters['dim'], noise_dim = self.model_parameters['noise_dim'] , betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])), n_discriminator = 3)  
+        elif self.gan == 'cramer GAN':
+            self.gan = RegularSynthesizer(modelname='cramer', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], layers_dim = self.model_parameters['dim'], noise_dim = self.model_parameters['noise_dim'] , betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))      
+        elif self.gan == 'CTGAN':
+            self.gan = RegularSynthesizer(modelname='ctgan', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], pac = 8, lr = self.model_parameters['learning_rate'], betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))     
         else:
             raise ValueError(f"Unsupported GAN type: {self.gan}")
         

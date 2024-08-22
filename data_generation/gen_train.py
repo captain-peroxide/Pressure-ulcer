@@ -2,8 +2,13 @@ from generate import Generate
 import warnings
 import pandas as pd
 import os
+import tensorflow as tf
 from dotenv import load_dotenv
 from pathlib import Path
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)  
 
 load_dotenv()
 warnings.filterwarnings("ignore")
@@ -32,7 +37,7 @@ def main():
     data_path = Path(os.getenv('DATA_PATH'))
     config_path = Path(os.getenv('CONFIG_PATH'))
     save_directory = Path(os.getenv('SAVE_PATH'))
-    gan = 'WGAN_GP'
+    gan = 'CTGAN'
     num_samples = 100
 
     generator = initialize_generator(data_path, config_path, gan)

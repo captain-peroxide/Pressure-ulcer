@@ -1,8 +1,8 @@
 train_config:
-  epochs: 100
+  epochs: 10
 
 model_config:
-  learning_rate: 0.000001
+  learning_rate: 0.0000001
   beta_1: 0.5
   beta_2: 0.9
   batch_size: 32 
