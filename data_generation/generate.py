@@ -48,7 +48,7 @@ class Generate:
         elif self.gan == 'cramer GAN':
             self.gan = RegularSynthesizer(modelname='cramer', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], lr = self.model_parameters['learning_rate'], layers_dim = self.model_parameters['dim'], noise_dim = self.model_parameters['noise_dim'] , betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))      
         elif self.gan == 'CTGAN':
-            self.gan = RegularSynthesizer(modelname='ctgan', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], pac = 8, lr = self.model_parameters['learning_rate'], betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))     
+            self.gan = RegularSynthesizer(modelname='ctgan', model_parameters=ModelParameters(batch_size = self.model_parameters['batch_size'], pac = 32, lr = self.model_parameters['learning_rate'], betas = (self.model_parameters['beta_1'], self.model_parameters['beta_2'])))     
         else:
             raise ValueError(f"Unsupported GAN type: {self.gan}")
         

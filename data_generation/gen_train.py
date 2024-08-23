@@ -38,7 +38,7 @@ def main():
     config_path = Path(os.getenv('CONFIG_PATH'))
     save_directory = Path(os.getenv('SAVE_PATH'))
     gan = 'CTGAN'
-    num_samples = 100
+    num_samples = 3000
 
     generator = initialize_generator(data_path, config_path, gan)
     train_gan(generator)
