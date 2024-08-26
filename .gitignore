@@ -6,4 +6,3 @@ wgan_gp_test/
 wandb/
 cache/
 .env
-plots/
