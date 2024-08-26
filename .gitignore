@@ -5,3 +5,4 @@ data_generation/__pycache__
 wgan_gp_test/
 wandb/
 cache/
+.env
