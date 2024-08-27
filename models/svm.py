@@ -155,14 +155,17 @@ class SVMPipeline:
 # Example usage
 if __name__ == "__main__":
     data = pd.read_excel('data/pressure ulcer.xlsx')
-
+    kernels =['rbf','linear','poly','sigmoid']
     # Initialize and run the SVM pipeline with WandB tracking
-    svm_pipeline = SVMPipeline(
-        kernel='rbf', 
-        C=1.0, 
-        random_state=42,
-        wandb_project='pressure_svm', 
-        wandb_entity=Path(os.getenv('WANDB_ENTITY')),
-        wandb_api_key=Path(os.getenv('WANDB_API'))  # Your WandB API key here
-    )
-    accuracy = svm_pipeline.run(data, target_column='caretaker score')
+    for ker in kernels:
+        svm_pipeline = SVMPipeline(
+            kernel=ker, 
+            C=1.0, 
+            random_state=42,
+            wandb_project='pressure_svm', 
+            wandb_entity=Path(os.getenv('WANDB_ENTITY')),
+            wandb_api_key=Path(os.getenv('WANDB_API'))  # Your WandB API key here
+        )
+        accuracy = svm_pipeline.run(data, target_column='caretaker score')
+        
+    
