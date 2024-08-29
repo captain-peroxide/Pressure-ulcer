@@ -8,6 +8,7 @@ from sklearn.metrics import accuracy_score
 from dotenv import load_dotenv
 from pathlib import Path
 from typing import Optional, Tuple
+load_dotenv()
 
 class AutoMLPipeline:
     def __init__(self, generations: int = 5, population_size: int = 20, random_state: int = 42, 
