@@ -6,7 +6,6 @@ from tpot import TPOTClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from dotenv import load_dotenv
-from pathlib import Path
 from typing import Optional, Tuple
 load_dotenv()
 
@@ -185,7 +184,7 @@ if __name__ == "__main__":
         population_size=20, 
         random_state=42,
         wandb_project='pressure_automl', 
-        wandb_entity=Path(os.getenv('WANDB_ENTITY')) ,
-        wandb_api_key=Path(os.getenv('WANDB_API'))  # Your WandB API key here
+        wandb_entity=os.getenv('WANDB_ENTITY') ,
+        wandb_api_key=os.getenv('WANDB_API')  # Your WandB API key here
     )
     accuracy = automl.run(data, target_column='caretaker score')

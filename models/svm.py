@@ -6,8 +6,8 @@ from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from dotenv import load_dotenv
-from pathlib import Path
 from typing import Optional, Tuple
+load_dotenv()
 
 class SVMPipeline:
     def __init__(self, kernel: str = 'rbf', C: float = 1.0, random_state: int = 42, 
@@ -163,8 +163,8 @@ if __name__ == "__main__":
             C=1.0, 
             random_state=42,
             wandb_project='pressure_svm', 
-            wandb_entity=Path(os.getenv('WANDB_ENTITY')),
-            wandb_api_key=Path(os.getenv('WANDB_API'))  # Your WandB API key here
+            wandb_entity=os.getenv('WANDB_ENTITY'),
+            wandb_api_key=os.getenv('WANDB_API') # Your WandB API key here
         )
         accuracy = svm_pipeline.run(data, target_column='caretaker score')
         
