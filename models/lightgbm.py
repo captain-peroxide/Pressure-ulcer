@@ -149,7 +149,7 @@ class LightGBMPipeline:
 
 # Example usage
 if __name__ == "__main__":
-    data = pd.read_excel('data/pressure_ulcer.xlsx')
+    data = pd.read_excel('data/pressure ulcer.xlsx')
 
     # Initialize and run the LightGBM pipeline with WandB tracking
     lgb_pipeline = LightGBMPipeline(
