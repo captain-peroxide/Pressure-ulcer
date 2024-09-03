@@ -1,0 +1,10 @@
+train_config:
+  epochs: 30
+
+model_config:
+  learning_rate: 0.0000001
+  beta_1: 0.5
+  beta_2: 0.9
+  batch_size: 32 
+  noise_dim : 32
+  dim : 32
