@@ -1,12 +1,27 @@
+import os
+import sys
+import numpy as np
 import pandas as pd
+import wandb
 from catboost import CatBoostClassifier, Pool
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
+from typing import Optional, Tuple
+from dotenv import load_dotenv
+
+# Add the data_generation folder to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_generation')))
+from generate import Generate  # Import the Generate class
+
+# Load environment variables from a .env file
+load_dotenv()
 
 class CatBoostPipeline:
     def __init__(self, iterations: int = 500, learning_rate: float = 0.1, depth: int = 6, 
-                 random_state: int = 42, verbose: bool = True):
+                 random_state: int = 42, verbose: bool = True, 
+                 wandb_project: Optional[str] = None, wandb_entity: Optional[str] = None, 
+                 wandb_api_key: Optional[str] = None):
         self.iterations = iterations
         self.learning_rate = learning_rate
         self.depth = depth
@@ -19,6 +34,13 @@ class CatBoostPipeline:
             random_state=self.random_state,
             verbose=self.verbose
         )
+        self.wandb_project = wandb_project
+        self.wandb_entity = wandb_entity
+
+        # Initialize WandB if project and API key are provided
+        if self.wandb_project and wandb_api_key:
+            wandb.login(key=wandb_api_key)
+            wandb.init(project=self.wandb_project, entity=self.wandb_entity, reinit=True)
 
     def load_data(self, data: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
         categorical_columns = data.select_dtypes(include=['object', 'category']).columns
@@ -44,6 +66,11 @@ class CatBoostPipeline:
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> float:
         y_pred = self.model.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)
+
+        # Log accuracy to WandB
+        if self.wandb_project:
+            wandb.log({'accuracy': accuracy})
+
         return accuracy
 
     def run(self, data: pd.DataFrame, target_column: str) -> float:
@@ -64,14 +91,17 @@ class CatBoostPipeline:
 
 # Example usage
 if __name__ == "__main__":
-    data = pd.read_excel('data/pressure ulcer.xlsx')
-    output_dim = len(data['caretaker score'].unique())  # Number of classes
+    data_path = 'C:/Users/91932/Downloads/Pressure-ulcer-main1/Pressure-ulcer-main/data/pressure ulcer.xlsx'
+    data = pd.read_excel(data_path)
 
     catboost_pipeline = CatBoostPipeline(
         iterations=500, 
         learning_rate=0.1, 
         depth=6, 
         random_state=42, 
-        verbose=True
+        verbose=True,
+        wandb_project='pressure_automl', 
+        wandb_entity=os.getenv('WANDB_ENTITY'), 
+        wandb_api_key=os.getenv('WANDB_API')  
     )
     accuracy = catboost_pipeline.run(data, target_column='caretaker score')
