@@ -129,7 +129,7 @@ class CatBoostPipeline:
 
 # Example usage
 if __name__ == "__main__":
-    data_path = 'C:/Users/91932/Downloads/Pressure-ulcer-main1/Pressure-ulcer-main/data_generation/pressure ulcer.xlsx'
+    data_path = 'data/pressure ulcer.xlsx'
     data = pd.read_excel(data_path)
 
     catboost_pipeline = CatBoostPipeline(
