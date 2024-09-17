@@ -4,13 +4,15 @@ import wandb
 import os
 from tpot import TPOTClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 from dotenv import load_dotenv
 from typing import Optional, Tuple
+import matplotlib.pyplot as plt
+import seaborn as sns
 load_dotenv()
 
 class AutoMLPipeline:
-    def __init__(self, generations: int = 5, population_size: int = 20, random_state: int = 42, 
+    def __init__(self, generations: int = 10, population_size: int = 100, random_state: int = 42, 
                  n_jobs: int = -1, verbosity: int = 2, wandb_project: Optional[str] = None, 
                  wandb_entity: Optional[str] = None, wandb_api_key: Optional[str] = None) -> None:
         """
@@ -111,7 +113,7 @@ class AutoMLPipeline:
             })
         self.model.fit(X_train, y_train)
 
-    def evaluate(self, X_test: pd.DataFrame, y_test: pd.Series) -> float:
+    def evaluate(self, X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame, y_test: pd.Series) -> float:
         """
         Evaluate the trained model on the test data.
         
@@ -126,11 +128,33 @@ class AutoMLPipeline:
             raise RuntimeError("Model has not been trained.")
         
         y_pred = self.model.predict(X_test)
+        y_pred_proba = self.model.predict_proba(X_test)[:, 1]
+
         accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='weighted')
+        recall = recall_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average='weighted')
+        auc = roc_auc_score(y_test, y_pred_proba)
+        cm = confusion_matrix(y_test, y_pred)
         
+
         # Log metrics to WandB
         if self.wandb_project:
-            wandb.log({'accuracy': accuracy})
+            wandb.log({
+                "test_accuracy": accuracy,
+                "test_precision": precision,
+                "test_recall": recall,
+                "test_f1_score": f1,
+                "test_auc": auc,
+            })
+
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Negative', 'Positive'], yticklabels=['Negative', 'Positive'])
+        plt.xlabel('Predicted')
+        plt.ylabel('True')
+        plt.title('Confusion Matrix')
+        wandb.log({"confusion_matrix": wandb.Image(plt)})
+        plt.close()
         
         return accuracy
 
@@ -165,7 +189,7 @@ class AutoMLPipeline:
         self.train(X_train, y_train)
 
         # Evaluate the model
-        accuracy = self.evaluate(X_test, y_test)
+        accuracy = self.evaluate(X_train, y_train, X_test, y_test)
         print(f"Test Accuracy: {accuracy:.4f}")
 
         # Export the pipeline
@@ -176,7 +200,7 @@ class AutoMLPipeline:
 # Example usage
 if __name__ == "__main__":
 
-    data = pd.read_excel('data\pressure ulcer.xlsx')
+    data = pd.read_csv('data\data.csv')
 
     # Initialize and run the AutoML pipeline with WandB tracking
     automl = AutoMLPipeline(

@@ -4,9 +4,11 @@ import wandb
 import os
 import lightgbm as lgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 from dotenv import load_dotenv
+import matplotlib.pyplot as plt
+import seaborn as sns
 from typing import Optional, Tuple
 
 load_dotenv()
@@ -115,11 +117,33 @@ class LightGBMPipeline:
             raise RuntimeError("Model has not been trained.")
         
         y_pred = self.model.predict(X_test)
+        y_pred_proba = self.model.predict_proba(X_test)[:, 1]
+
         accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='weighted')
+        recall = recall_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average='weighted')
+        auc = roc_auc_score(y_test, y_pred_proba)
+        cm = confusion_matrix(y_test, y_pred)
+        
         
         # Log metrics to WandB
         if self.wandb_project:
-            wandb.log({'accuracy': accuracy})
+            wandb.log({
+                "test_accuracy": accuracy,
+                "test_precision": precision,
+                "test_recall": recall,
+                "test_f1_score": f1,
+                "test_auc": auc,
+            })
+
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Negative', 'Positive'], yticklabels=['Negative', 'Positive'])
+        plt.xlabel('Predicted')
+        plt.ylabel('True')
+        plt.title('Confusion Matrix')
+        wandb.log({"confusion_matrix": wandb.Image(plt)})
+        plt.close()
         
         return accuracy
 
@@ -149,7 +173,7 @@ class LightGBMPipeline:
 
 # Example usage
 if __name__ == "__main__":
-    data = pd.read_excel('data/pressure ulcer.xlsx')
+    data = pd.read_csv('data/data.csv')
 
     # Initialize and run the LightGBM pipeline with WandB tracking
     lgb_pipeline = LightGBMPipeline(

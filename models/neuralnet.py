@@ -23,8 +23,7 @@ class AdvancedNeuralNet(nn.Module):
             current_dim = hidden_dim
 
         layers.append(nn.Linear(current_dim, output_dim))
-        layers.append(nn.Softmax(dim=1))
-
+        # Removed the softmax layer since CrossEntropyLoss includes that
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -49,7 +48,7 @@ class AdvancedNeuralNetPipeline:
     def load_data(self, data: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
         categorical_columns = data.select_dtypes(include=['object', 'category']).columns
         data[categorical_columns] = data[categorical_columns].astype(str)
-        data = pd.get_dummies(data, columns=categorical_columns)
+        data = pd.get_dummies(data, columns=[col for col in categorical_columns if col != target_column])
         X = data.drop(target_column, axis=1)
         y = data[target_column]
         return X, y
@@ -86,7 +85,7 @@ class AdvancedNeuralNetPipeline:
         with torch.no_grad():
             for X_batch, _ in test_loader:
                 outputs = self.model(X_batch)
-                _, predicted = torch.max(outputs.data, 1)
+                _, predicted = torch.max(outputs, 1)  # Removed .data
                 all_preds.extend(predicted.numpy())
 
         accuracy = accuracy_score(y_test, all_preds)
@@ -103,14 +102,14 @@ class AdvancedNeuralNetPipeline:
         print(f"y_train shape: {y_train.shape}")
         print(f"y_test shape: {y_test.shape}")
         
-        self.train(X_train_scaled, y_train.values)
-        accuracy = self.evaluate(X_test_scaled, y_test.values)
+        self.train(X_train_scaled, y_train.to_numpy())  # Changed to .to_numpy()
+        accuracy = self.evaluate(X_test_scaled, y_test.to_numpy())  # Changed to .to_numpy()
         print(f"Test Accuracy: {accuracy:.4f}")
         return accuracy
 
 # Example usage
 if __name__ == "__main__":
-    data = pd.read_excel('data/pressure ulcer.xlsx')
+    data = pd.read_csv('data/data.csv')
     input_dim = data.shape[1] - 1  # Number of features
     hidden_dims = [128, 64, 32]  # List of hidden layer dimensions
     output_dim = len(data['caretaker score'].unique())  # Number of classes
