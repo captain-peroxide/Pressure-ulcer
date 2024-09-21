@@ -1,12 +1,15 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
 import numpy as np
 import pandas as pd
 import wandb
-import os
 from tpot import TPOTClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 from dotenv import load_dotenv
 from typing import Optional, Tuple
+from plots import MLPlots
 import matplotlib.pyplot as plt
 import seaborn as sns
 load_dotenv()
@@ -41,6 +44,8 @@ class AutoMLPipeline:
         if self.wandb_project and wandb_api_key:
             wandb.login(key=wandb_api_key)
             wandb.init(project=self.wandb_project, entity=self.wandb_entity, reinit=True)
+
+        self.plots = MLPlots()    
 
     def load_data(self, data: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
         """
@@ -130,33 +135,75 @@ class AutoMLPipeline:
         y_pred = self.model.predict(X_test)
         y_pred_proba = self.model.predict_proba(X_test)[:, 1]
 
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='weighted')
-        recall = recall_score(y_test, y_pred, average='weighted')
-        f1 = f1_score(y_test, y_pred, average='weighted')
-        auc = roc_auc_score(y_test, y_pred_proba)
-        cm = confusion_matrix(y_test, y_pred)
-        
+        y_test_binary = np.where(y_test == 2, 1, 0)
 
-        # Log metrics to WandB
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test_binary, y_pred)
+        precision = precision_score(y_test_binary, y_pred, average='weighted')
+        recall = recall_score(y_test_binary, y_pred, average='weighted')
+        f1 = f1_score(y_test_binary, y_pred, average='weighted')
+        auc_score = roc_auc_score(y_test_binary, y_pred_proba)
+        cm = confusion_matrix(y_test_binary, y_pred)
+
+        # Log evaluation metrics to W&B
         if self.wandb_project:
             wandb.log({
                 "test_accuracy": accuracy,
                 "test_precision": precision,
                 "test_recall": recall,
                 "test_f1_score": f1,
-                "test_auc": auc,
+                "test_auc": auc_score,
             })
 
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Negative', 'Positive'], yticklabels=['Negative', 'Positive'])
-        plt.xlabel('Predicted')
-        plt.ylabel('True')
-        plt.title('Confusion Matrix')
-        wandb.log({"confusion_matrix": wandb.Image(plt)})
+        # Plot and log confusion matrix
+        self.plots.plot_confusion_matrix(y_test, y_pred, labels=self.model.classes_)
+        plt.savefig("confusion_matrix.png")
         plt.close()
+        if self.wandb_project:
+            wandb.log({"confusion_matrix": wandb.Image("confusion_matrix.png")})
+
+        # Plot and log ROC curve
+        self.plots.plot_roc_curve(y_test_binary, y_pred_proba)
+        plt.savefig("roc_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"roc_curve": wandb.Image("roc_curve.png")})
+
+        # Plot and log Precision-Recall curve
+        self.plots.plot_precision_recall_curve(y_test_binary, y_pred_proba)
+        plt.savefig("precision_recall_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"precision_recall_curve": wandb.Image("precision_recall_curve.png")})
+
+        # Plot and log Feature Importance
+        '''self.plots.plot_feature_importance(self.model, X_test.columns)
+        plt.savefig("feature_importance.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"feature_importance": wandb.Image("feature_importance.png")})'''
+
+        self.plots.plot_calibration_curve(y_test_binary, y_pred_proba)
+        plt.savefig("calibration_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"calibration_curve": wandb.Image("calibration_curve.png")})
+
+        self.plots.plot_cumulative_gain(y_test_binary, y_pred_proba)
+        plt.savefig("cumulative_gain.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"cumulative_gain": wandb.Image("cumulative_gain.png")})
+
+        self.plots.plot_lift_curve(y_test_binary, y_pred_proba)
+        plt.savefig("lift_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"lift_curve": wandb.Image("lift_curve.png")})
         
+
         return accuracy
+
 
     def export_pipeline(self, file_name: str = 'best_pipeline.py') -> None:
         """
