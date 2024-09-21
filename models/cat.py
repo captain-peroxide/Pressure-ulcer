@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
 import numpy as np
 import pandas as pd
 import wandb
@@ -8,6 +10,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from sklearn.preprocessing import StandardScaler
 from typing import Optional, Tuple
 import matplotlib.pyplot as plt
+from plots import MLPlots
 import seaborn as sns
 
 class CatBoostPipeline:
@@ -43,6 +46,7 @@ class CatBoostPipeline:
                 'random_state': self.random_state,
                 'early_stopping_rounds': self.early_stopping_rounds
             })
+        self.plots = MLPlots()    
 
     def load_data(self, data: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
         categorical_columns = data.select_dtypes(include=['object', 'category']).columns
@@ -78,17 +82,19 @@ class CatBoostPipeline:
         feature_importances = self.model.get_feature_importance(train_pool)
         wandb.log({"feature_importance": wandb.Histogram(feature_importances)})
 
-    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> float:
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, X_test_df: pd.DataFrame) -> float:
         y_pred = self.model.predict(X_test)
         y_pred_proba = self.model.predict_proba(X_test)[:, 1]
 
+        y_test_binary = np.where(y_test == 2, 1, 0)
+
         # Calculate evaluation metrics
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='weighted')
-        recall = recall_score(y_test, y_pred, average='weighted')
-        f1 = f1_score(y_test, y_pred, average='weighted')
-        auc = roc_auc_score(y_test, y_pred_proba)
-        cm = confusion_matrix(y_test, y_pred)
+        accuracy = accuracy_score(y_test_binary, y_pred)
+        precision = precision_score(y_test_binary, y_pred, average='weighted')
+        recall = recall_score(y_test_binary, y_pred, average='weighted')
+        f1 = f1_score(y_test_binary, y_pred, average='weighted')
+        auc_score = roc_auc_score(y_test_binary, y_pred_proba)
+        cm = confusion_matrix(y_test_binary, y_pred)
 
         # Log evaluation metrics to W&B
         if self.wandb_project:
@@ -97,17 +103,55 @@ class CatBoostPipeline:
                 "test_precision": precision,
                 "test_recall": recall,
                 "test_f1_score": f1,
-                "test_auc": auc,
+                "test_auc": auc_score,
             })
 
         # Plot and log confusion matrix
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['1', '2'], yticklabels=['1', '2'])
-        plt.xlabel('Predicted')
-        plt.ylabel('True')
-        plt.title('Confusion Matrix')
-        wandb.log({"confusion_matrix": wandb.Image(plt)})
+        self.plots.plot_confusion_matrix(y_test, y_pred, labels=self.model.classes_)
+        plt.savefig("confusion_matrix.png")
         plt.close()
+        if self.wandb_project:
+            wandb.log({"confusion_matrix": wandb.Image("confusion_matrix.png")})
+
+        # Plot and log ROC curve
+        self.plots.plot_roc_curve(y_test_binary, y_pred_proba)
+        plt.savefig("roc_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"roc_curve": wandb.Image("roc_curve.png")})
+
+        # Plot and log Precision-Recall curve
+        self.plots.plot_precision_recall_curve(y_test_binary, y_pred_proba)
+        plt.savefig("precision_recall_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"precision_recall_curve": wandb.Image("precision_recall_curve.png")})
+
+        # Plot and log Feature Importance
+        self.plots.plot_feature_importance(self.model, X_test_df.columns)
+        plt.savefig("feature_importance.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"feature_importance": wandb.Image("feature_importance.png")})
+
+        self.plots.plot_calibration_curve(y_test_binary, y_pred_proba)
+        plt.savefig("calibration_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"calibration_curve": wandb.Image("calibration_curve.png")})
+
+        self.plots.plot_cumulative_gain(y_test_binary, y_pred_proba)
+        plt.savefig("cumulative_gain.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"cumulative_gain": wandb.Image("cumulative_gain.png")})
+
+        self.plots.plot_lift_curve(y_test_binary, y_pred_proba)
+        plt.savefig("lift_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"lift_curve": wandb.Image("lift_curve.png")})
+        
 
         return accuracy
 
@@ -116,14 +160,9 @@ class CatBoostPipeline:
         X_train, X_test, y_train, y_test = self.split_data(X, y)
         X_train_scaled, X_test_scaled = self.preprocess_data(X_train, X_test)
         
-        # Debugging: Print shapes of the data
-        print(f"X_train_scaled shape: {X_train_scaled.shape}")
-        print(f"X_test_scaled shape: {X_test_scaled.shape}")
-        print(f"y_train shape: {y_train.shape}")
-        print(f"y_test shape: {y_test.shape}")
         
         self.train(X_train_scaled, y_train.values)
-        accuracy = self.evaluate(X_test_scaled, y_test.values)
+        accuracy = self.evaluate(X_test_scaled, y_test.values, X_test)
         print(f"Test Accuracy: {accuracy:.4f}")
         return accuracy
 

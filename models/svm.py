@@ -1,7 +1,9 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
 import numpy as np
 import pandas as pd
 import wandb
-import os
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
@@ -9,36 +11,46 @@ from dotenv import load_dotenv
 from typing import Optional, Tuple
 import matplotlib.pyplot as plt
 import seaborn as sns
+from plots import MLPlots
 load_dotenv()
 
 class SVMPipeline:
-    def __init__(self, kernel: str = 'rbf', C: float = 1.0, random_state: int = 42, 
-                 n_jobs: int = -1, wandb_project: Optional[str] = None, 
-                 wandb_entity: Optional[str] = None, wandb_api_key: Optional[str] = None) -> None:
-        """
-        Initialize the SVM pipeline with sklearn and WandB.
-        
-        Parameters:
-        - kernel: Kernel type to be used in the SVM algorithm
-        - C: Regularization parameter
-        - random_state: Random seed for reproducibility
-        - n_jobs: Number of jobs to run in parallel (-1 uses all processors)
-        - wandb_project: WandB project name for tracking experiments
-        - wandb_entity: WandB entity name for tracking experiments
-        - wandb_api_key: WandB API key for logging in programmatically
-        """
-        self.kernel = kernel
+    def __init__(self, C=1.0, kernel='rbf', degree=3, gamma='scale', coef0=0.0, shrinking=True,
+                 probability=True, tol=1e-3, cache_size=200, class_weight=None, verbose=False,
+                 max_iter=-1, decision_function_shape='ovr', break_ties=False, random_state=None,
+                 wandb_project=None, wandb_entity=None, wandb_api_key: Optional[str] = None) -> None:
         self.C = C
+        self.kernel = kernel
+        self.degree = degree
+        self.gamma = gamma
+        self.coef0 = coef0
+        self.shrinking = shrinking
+        self.probability = probability
+        self.tol = tol
+        self.cache_size = cache_size
+        self.class_weight = class_weight
+        self.verbose = verbose
+        self.max_iter = max_iter
+        self.decision_function_shape = decision_function_shape
+        self.break_ties = break_ties
         self.random_state = random_state
-        self.n_jobs = n_jobs
-        self.model: Optional[SVC] = None
         self.wandb_project = wandb_project
         self.wandb_entity = wandb_entity
+
+        # Initialize the SVC model with probability=True
+        self.model = SVC(C=self.C, kernel=self.kernel, degree=self.degree, gamma=self.gamma, coef0=self.coef0,
+                         shrinking=self.shrinking, probability=self.probability, tol=self.tol, cache_size=self.cache_size,
+                         class_weight=self.class_weight, verbose=self.verbose, max_iter=self.max_iter,
+                         decision_function_shape=self.decision_function_shape, break_ties=self.break_ties,
+                         random_state=self.random_state)
+
 
         # Initialize WandB with API key
         if self.wandb_project and wandb_api_key:
             wandb.login(key=wandb_api_key)
             wandb.init(project=self.wandb_project, entity=self.wandb_entity, reinit=True)
+
+        self.plots = MLPlots()     
 
     def load_data(self, data: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
         """
@@ -124,32 +136,73 @@ class SVMPipeline:
         y_pred = self.model.predict(X_test)
         y_pred_proba = self.model.predict_proba(X_test)[:, 1]
 
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='weighted')
-        recall = recall_score(y_test, y_pred, average='weighted')
-        f1 = f1_score(y_test, y_pred, average='weighted')
-        auc = roc_auc_score(y_test, y_pred_proba)
-        cm = confusion_matrix(y_test, y_pred)
-        
-        
-        # Log metrics to WandB
+        y_test_binary = np.where(y_test == 2, 1, 0)
+
+        # Calculate evaluation metrics
+        accuracy = accuracy_score(y_test_binary, y_pred)
+        precision = precision_score(y_test_binary, y_pred, average='weighted')
+        recall = recall_score(y_test_binary, y_pred, average='weighted')
+        f1 = f1_score(y_test_binary, y_pred, average='weighted')
+        auc_score = roc_auc_score(y_test_binary, y_pred_proba)
+        cm = confusion_matrix(y_test_binary, y_pred)
+
+        # Log evaluation metrics to W&B
         if self.wandb_project:
             wandb.log({
                 "test_accuracy": accuracy,
                 "test_precision": precision,
                 "test_recall": recall,
                 "test_f1_score": f1,
-                "test_auc": auc,
+                "test_auc": auc_score,
             })
 
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Negative', 'Positive'], yticklabels=['Negative', 'Positive'])
-        plt.xlabel('Predicted')
-        plt.ylabel('True')
-        plt.title('Confusion Matrix')
-        wandb.log({"confusion_matrix": wandb.Image(plt)})
-        plt.close()    
+        # Plot and log confusion matrix
+        self.plots.plot_confusion_matrix(y_test, y_pred, labels=self.model.classes_)
+        plt.savefig("confusion_matrix.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"confusion_matrix": wandb.Image("confusion_matrix.png")})
+
+        # Plot and log ROC curve
+        self.plots.plot_roc_curve(y_test_binary, y_pred_proba)
+        plt.savefig("roc_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"roc_curve": wandb.Image("roc_curve.png")})
+
+        # Plot and log Precision-Recall curve
+        self.plots.plot_precision_recall_curve(y_test_binary, y_pred_proba)
+        plt.savefig("precision_recall_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"precision_recall_curve": wandb.Image("precision_recall_curve.png")})
+
+        # Plot and log Feature Importance
+        '''self.plots.plot_feature_importance(self.model, X_test.columns)
+        plt.savefig("feature_importance.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"feature_importance": wandb.Image("feature_importance.png")})
+'''
+        self.plots.plot_calibration_curve(y_test_binary, y_pred_proba)
+        plt.savefig("calibration_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"calibration_curve": wandb.Image("calibration_curve.png")})
+
+        self.plots.plot_cumulative_gain(y_test_binary, y_pred_proba)
+        plt.savefig("cumulative_gain.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"cumulative_gain": wandb.Image("cumulative_gain.png")})
+
+        self.plots.plot_lift_curve(y_test_binary, y_pred_proba)
+        plt.savefig("lift_curve.png")
+        plt.close()
+        if self.wandb_project:
+            wandb.log({"lift_curve": wandb.Image("lift_curve.png")})
         
+
         return accuracy
 
     def run(self, data: pd.DataFrame, target_column: str) -> float:

@@ -7,3 +7,4 @@ wandb/
 cache/
 models/__pycache__
 .env
+utils/__pycache__
