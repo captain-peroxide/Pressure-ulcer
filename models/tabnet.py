@@ -4,17 +4,18 @@ import wandb
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
-from pytorch_tabnet.tab_model import TabNetClassifier
+from pytorch_tabnet.tab_model import TabNetRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
-from dotenv import load_dotenv
 from plots import MLPlots
 from pathlib import Path
 from typing import Optional, Tuple
 
-load_dotenv()
 class TabNetPipeline:
     def __init__(self, n_d: int = 8, n_a: int = 8, n_steps: int = 3, gamma: float = 1.3, 
                  lambda_sparse: float = 1e-3, random_state: int = 42, 
@@ -26,142 +27,108 @@ class TabNetPipeline:
         self.gamma = gamma
         self.lambda_sparse = lambda_sparse
         self.random_state = random_state
-        self.model: Optional[TabNetClassifier] = None
+        self.model: Optional[TabNetRegressor] = None
         self.wandb_project = wandb_project
         self.wandb_entity = wandb_entity
+        self.wandb_api_key = wandb_api_key
 
         if self.wandb_project and wandb_api_key:
-            wandb.login(key=wandb_api_key)
-            wandb.init(project=self.wandb_project, entity=self.wandb_entity, reinit=True)
+            wandb.login(key=self.wandb_api_key)
+            wandb.init(project=self.wandb_project, entity=self.wandb_entity)
 
-        self.plots = MLPlots()    
+        # Initialize the MLPlots class
+        self.plots = MLPlots()
 
     def load_data(self, data: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
-        categorical_columns = data.select_dtypes(include=['object', 'category']).columns
-        data[categorical_columns] = data[categorical_columns].astype(str)
-        data = pd.get_dummies(data, columns=categorical_columns)
-        X = data.drop(target_column, axis=1)
+        X = data.drop(columns=[target_column])
         y = data[target_column]
         return X, y
 
-    def split_data(self, X: pd.DataFrame, y: pd.Series, test_size: float = 0.2) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        return train_test_split(X, y, test_size=test_size, random_state=self.random_state)
+    def split_data(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        return train_test_split(X, y, test_size=0.2, random_state=self.random_state)
 
-    def create_model(self) -> None:
-        self.model = TabNetClassifier(
-            n_d=self.n_d,
-            n_a=self.n_a,
-            n_steps=self.n_steps,
-            gamma=self.gamma,
-            lambda_sparse=self.lambda_sparse,
-            seed=self.random_state
+    def preprocess_data(self, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, list]:
+        # Identify categorical and numerical columns
+        categorical_cols = X_train.select_dtypes(include=['object', 'category']).columns
+        numerical_cols = X_train.select_dtypes(include=['number']).columns
+
+        # Create a column transformer with OneHotEncoder for categorical features and StandardScaler for numerical features
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', StandardScaler(), numerical_cols),
+                ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+            ]
         )
 
-    def train(self, X_train: pd.DataFrame, y_train: pd.Series) -> None:
-        if self.model is None:
-            self.create_model()
-        if self.wandb_project:
-            wandb.config.update({
-                'n_d': self.n_d,
-                'n_a': self.n_a,
-                'n_steps': self.n_steps,
-                'gamma': self.gamma,
-                'lambda_sparse': self.lambda_sparse,
-                'random_state': self.random_state
-            })
-        self.model.fit(X_train.values.astype(np.float32), y_train.values.astype(np.float32))
+        # Fit and transform the training data, transform the test data
+        X_train_processed = preprocessor.fit_transform(X_train)
+        X_test_processed = preprocessor.transform(X_test)
 
-    def evaluate(self, X_test: pd.DataFrame, y_test: pd.Series) -> float:
-        if self.model is None:
-            raise RuntimeError("Model has not been trained.")
-        
-        # Ensure X_test is a NumPy array
-        X_test_np = X_test.values.astype(np.float32)
-        
-        y_pred = self.model.predict(X_test_np)
-        y_pred_proba = self.model.predict_proba(X_test_np)[:, 1]
+        # Get feature names after transformation
+        feature_names = numerical_cols.tolist() + preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_cols).tolist()
 
-        y_test_binary = np.where(y_test == 2, 1, 0)
+        return X_train_processed, X_test_processed, feature_names
+
+    def train(self, X_train: np.ndarray, y_train: pd.Series) -> None:
+        self.model = TabNetRegressor(
+            n_d=self.n_d, n_a=self.n_a, n_steps=self.n_steps, gamma=self.gamma, 
+            lambda_sparse=self.lambda_sparse, seed=self.random_state
+        )
+        self.model.fit(X_train, y_train.reshape(-1, 1))
+
+    def evaluate(self, X_test: np.ndarray, y_test: pd.Series, feature_names: list) -> float:
+        y_pred = self.model.predict(X_test).reshape(-1)
 
         # Calculate evaluation metrics
-        accuracy = accuracy_score(y_test_binary, y_pred)
-        precision = precision_score(y_test_binary, y_pred, average='weighted')
-        recall = recall_score(y_test_binary, y_pred, average='weighted')
-        f1 = f1_score(y_test_binary, y_pred, average='weighted')
-        auc_score = roc_auc_score(y_test_binary, y_pred_proba)
-        cm = confusion_matrix(y_test_binary, y_pred)
+        mae = mean_absolute_error(y_test, y_pred)
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
 
         # Log evaluation metrics to W&B
         if self.wandb_project:
             wandb.log({
-                "test_accuracy": accuracy,
-                "test_precision": precision,
-                "test_recall": recall,
-                "test_f1_score": f1,
-                "test_auc": auc_score,
+                "test_mae": mae,
+                "test_mse": mse,
+                "test_r2": r2,
             })
 
-        # Plot and log confusion matrix
-        self.plots.plot_confusion_matrix(y_test_binary, y_pred, labels=[0, 1])
-        plt.savefig("confusion_matrix.png")
+        # Plot and log residuals
+        self.plots.plot_residuals(y_test, y_pred)
+        plt.savefig("residuals.png")
         plt.close()
         if self.wandb_project:
-            wandb.log({"confusion_matrix": wandb.Image("confusion_matrix.png")})
-
-        # Plot and log ROC curve
-        self.plots.plot_roc_curve(y_test_binary, y_pred_proba)
-        plt.savefig("roc_curve.png")
-        plt.close()
-        if self.wandb_project:
-            wandb.log({"roc_curve": wandb.Image("roc_curve.png")})
-
-        # Plot and log Precision-Recall curve
-        self.plots.plot_precision_recall_curve(y_test_binary, y_pred_proba)
-        plt.savefig("precision_recall_curve.png")
-        plt.close()
-        if self.wandb_project:
-            wandb.log({"precision_recall_curve": wandb.Image("precision_recall_curve.png")})
+            wandb.log({"residuals": wandb.Image("residuals.png")})
 
         # Plot and log Feature Importance
-        self.plots.plot_feature_importance(self.model, X_test.columns)
+        self.plots.plot_feature_importance(self.model, feature_names)
         plt.savefig("feature_importance.png")
         plt.close()
         if self.wandb_project:
             wandb.log({"feature_importance": wandb.Image("feature_importance.png")})
 
-        # Plot and log Calibration Curve
-        self.plots.plot_calibration_curve(y_test_binary, y_pred_proba)
-        plt.savefig("calibration_curve.png")
-        plt.close()
-        if self.wandb_project:
-            wandb.log({"calibration_curve": wandb.Image("calibration_curve.png")})
-
-        # Plot and log Cumulative Gain Chart
-        self.plots.plot_cumulative_gain(y_test_binary, y_pred_proba)
-        plt.savefig("cumulative_gain.png")
-        plt.close()
-        if self.wandb_project:
-            wandb.log({"cumulative_gain": wandb.Image("cumulative_gain.png")})
-
-        # Plot and log Lift Curve
-        self.plots.plot_lift_curve(y_test_binary, y_pred_proba)
-        plt.savefig("lift_curve.png")
-        plt.close()
-        if self.wandb_project:
-            wandb.log({"lift_curve": wandb.Image("lift_curve.png")})
-
-        return accuracy
+        return r2
 
     def run(self, data: pd.DataFrame, target_column: str) -> float:
         X, y = self.load_data(data, target_column)
         X_train, X_test, y_train, y_test = self.split_data(X, y)
-        self.train(X_train, y_train)
-        accuracy = self.evaluate(X_test, y_test)
-        print(f"Test Accuracy: {accuracy:.4f}")
-        return accuracy
+        X_train_scaled, X_test_scaled, feature_names = self.preprocess_data(X_train, X_test)
+        
+        # Debugging: Print shapes of the data
+        print(f"X_train_scaled shape: {X_train_scaled.shape}")
+        print(f"X_test_scaled shape: {X_test_scaled.shape}")
+        print(f"y_train shape: {y_train.shape}")
+        print(f"y_test shape: {y_test.shape}")
+        
+        self.train(X_train_scaled, y_train.values)
+        r2 = self.evaluate(X_test_scaled, y_test.values, feature_names)
+        print(f"Test R2: {r2:.4f}")
+        return r2
 
+# Example usage
 if __name__ == "__main__":
-    data = pd.read_csv('data/data.csv')
+    data_path = 'data/final.csv'
+    data = pd.read_csv(data_path)
+
     tabnet_pipeline = TabNetPipeline(
         n_d=8, 
         n_a=8, 
@@ -171,6 +138,6 @@ if __name__ == "__main__":
         random_state=42,
         wandb_project='pressure_tabnet', 
         wandb_entity=os.getenv('WANDB_ENTITY'),
-        wandb_api_key=os.getenv('WANDB_API')
+        wandb_api_key=os.getenv('WANDB_API')  # Your WandB API key here
     )
-    accuracy = tabnet_pipeline.run(data, target_column='caretaker score')
+    r2 = tabnet_pipeline.run(data, target_column='Pressure_Ulcer_Probability')
